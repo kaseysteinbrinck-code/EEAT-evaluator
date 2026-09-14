@@ -6,12 +6,32 @@ import type { EeatEvaluation } from "@/lib/eeat/schema";
 type Tab = "paste" | "url";
 type PasteMode = "text" | "file";
 
-const STAGES = [
-  "Reading article...",
-  "Researching author & claims...",
-  "Scoring against the QRG...",
-  "Finalizing report...",
+// Stage boundaries in elapsed seconds, not a fixed interval -- real runs
+// regularly take 1-3+ minutes (bounded web research + a synthesis pass), so
+// a stage list that stops advancing after ~20s and then sits frozen reads
+// as "hung" well before the request actually finishes.
+const STAGES: { atSeconds: number; label: string }[] = [
+  { atSeconds: 0, label: "Reading article..." },
+  { atSeconds: 10, label: "Researching author & claims..." },
+  { atSeconds: 45, label: "Still researching -- verifying sources takes a while..." },
+  { atSeconds: 90, label: "Scoring against the QRG..." },
+  { atSeconds: 130, label: "Finalizing report..." },
 ];
+
+function currentStageLabel(elapsedSeconds: number): string {
+  let label = STAGES[0].label;
+  for (const stage of STAGES) {
+    if (elapsedSeconds >= stage.atSeconds) label = stage.label;
+  }
+  return label;
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
+}
 
 async function readJsonSafely(res: Response): Promise<{ error?: string }> {
   try {
@@ -37,20 +57,20 @@ export function EvaluatorForm({
   const [publishingSite, setPublishingSite] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const stageTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (loading) {
-      stageTimer.current = setInterval(() => {
-        setStageIndex((i) => Math.min(i + 1, STAGES.length - 1));
-      }, 6000);
-    } else if (stageTimer.current) {
-      clearInterval(stageTimer.current);
+      elapsedTimer.current = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
+    } else if (elapsedTimer.current) {
+      clearInterval(elapsedTimer.current);
     }
     return () => {
-      if (stageTimer.current) clearInterval(stageTimer.current);
+      if (elapsedTimer.current) clearInterval(elapsedTimer.current);
     };
   }, [loading]);
 
@@ -83,16 +103,17 @@ export function EvaluatorForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setStageIndex(0);
+    setElapsedSeconds(0);
     setLoading(true);
     try {
-      const { text } = await extractText();
+      const { text, title } = await extractText();
 
       const evalRes = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: text,
+          extractedTitle: title ?? undefined,
           source: tab,
           authorLinkedInUrl:
             tab === "paste" && !noDefinedAuthor && authorLinkedInUrl ? authorLinkedInUrl : undefined,
@@ -268,13 +289,21 @@ export function EvaluatorForm({
           disabled={loading || !canSubmit}
           className="mt-6 w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-dark disabled:opacity-50"
         >
-          {loading ? STAGES[stageIndex] : "Evaluate"}
+          {loading
+            ? `${currentStageLabel(elapsedSeconds)} (${formatElapsed(elapsedSeconds)})`
+            : "Evaluate"}
         </button>
 
         {loading && (
-          <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-neutral-100">
-            <div className="h-full animate-pulse rounded-full bg-brand" style={{ width: "60%" }} />
-          </div>
+          <>
+            <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-neutral-100">
+              <div className="h-full w-1/3 animate-progress-slide rounded-full bg-brand" />
+            </div>
+            <p className="mt-2 text-center text-xs text-neutral-400">
+              Real research (author + factual verification) usually takes 1-3 minutes -- this is
+              normal, no need to refresh.
+            </p>
+          </>
         )}
       </form>
     </div>

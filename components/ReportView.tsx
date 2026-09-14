@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import type { EeatEvaluation } from "@/lib/eeat/schema";
+import { scoreToGrade, scoreToQrgLabel } from "@/lib/eeat/schema";
 import { GradeBadge } from "./GradeBadge";
+
+function GoogleScoreLine({ score }: { score: number }) {
+  return (
+    <p className="text-[11px] text-neutral-400">
+      Google: {score}/100 · {scoreToQrgLabel(score)}
+    </p>
+  );
+}
 
 type PillarKey = "experience" | "expertise" | "authoritativeness" | "trust";
 
@@ -35,10 +44,12 @@ function PillarCard({ pillarKey, evaluation }: { pillarKey: PillarKey; evaluatio
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-neutral-700">{PILLAR_LABELS[pillarKey]}</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">{result.score}/100</span>
+        <div className="text-right">
           <GradeBadge grade={result.grade} size="sm" />
         </div>
+      </div>
+      <div className="mt-1 flex justify-end">
+        <GoogleScoreLine score={result.score} />
       </div>
 
       {pillarKey === "authoritativeness" && "subSignals" in result && (
@@ -48,7 +59,7 @@ function PillarCard({ pillarKey, evaluation }: { pillarKey: PillarKey; evaluatio
               Pre-existing authority
             </p>
             <p className="text-sm font-semibold text-neutral-700">
-              {result.subSignals.preExistingAuthority.score}/100
+              {scoreToGrade(result.subSignals.preExistingAuthority.score)}
             </p>
           </div>
           <div className="rounded-lg bg-neutral-50 p-2">
@@ -56,7 +67,7 @@ function PillarCard({ pillarKey, evaluation }: { pillarKey: PillarKey; evaluatio
               Content depth
             </p>
             <p className="text-sm font-semibold text-neutral-700">
-              {result.subSignals.contentDepth.score}/100
+              {scoreToGrade(result.subSignals.contentDepth.score)}
             </p>
           </div>
         </div>
@@ -100,6 +111,8 @@ export function ReportView({
   onReset: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
   const { overall, contentMeta, researchNotes } = evaluation;
 
   async function handleDownloadPdf() {
@@ -120,9 +133,20 @@ export function ReportView({
       a.click();
       a.remove();
       URL.revokeObjectURL(objectUrl);
+      setHasDownloaded(true);
     } finally {
       setDownloading(false);
     }
+  }
+
+  function handleReset() {
+    // Nothing is saved server-side -- once this report is dismissed without
+    // a downloaded PDF, it's gone for good.
+    if (!hasDownloaded) {
+      setShowDiscardModal(true);
+      return;
+    }
+    onReset();
   }
 
   return (
@@ -135,7 +159,7 @@ export function ReportView({
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
                 Overall E-E-A-T
               </p>
-              <p className="text-lg font-semibold text-neutral-800">{overall.score}/100</p>
+              <GoogleScoreLine score={overall.score} />
             </div>
           </div>
           <div className="flex gap-2">
@@ -147,7 +171,7 @@ export function ReportView({
               {downloading ? "Generating..." : "Download PDF"}
             </button>
             <button
-              onClick={onReset}
+              onClick={handleReset}
               className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark"
             >
               Evaluate another
@@ -205,6 +229,35 @@ export function ReportView({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {showDiscardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <h3 className="text-base font-semibold text-neutral-800">Evaluate another article?</h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+              If you still need to copy or download this report, go back and save it now.
+              Continuing will permanently discard the current evaluation.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                onClick={() => setShowDiscardModal(false)}
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-dark"
+              >
+                Go back and save
+              </button>
+              <button
+                onClick={() => {
+                  setShowDiscardModal(false);
+                  onReset();
+                }}
+                className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50"
+              >
+                Continue and discard
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

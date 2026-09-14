@@ -78,7 +78,15 @@ export async function extractUrl(rawUrl: string): Promise<ExtractedUrl> {
   let res: Response;
   try {
     res = await fetch(parsed.toString(), {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; EEATEvaluatorBot/1.0)" },
+      // A realistic browser UA reduces false blocks on UA-sensitive sites.
+      // Doesn't help against IP-based/anti-scraper blocking (see the 403
+      // handling below) -- some hosts block by network origin regardless
+      // of what the request claims to be.
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+          "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      },
       redirect: "follow",
       signal: controller.signal,
     });
@@ -86,6 +94,14 @@ export async function extractUrl(rawUrl: string): Promise<ExtractedUrl> {
     throw new Error("Could not reach that URL. Check it's correct and publicly accessible.");
   } finally {
     clearTimeout(timeout);
+  }
+
+  if (res.status === 403 || res.status === 999) {
+    throw new Error(
+      "That site is blocking automated requests (common with hosting/security firewalls " +
+        "that reject non-browser traffic regardless of who's asking) -- this isn't something " +
+        "we can work around reliably. Use the Paste/Upload tab for this article instead.",
+    );
   }
 
   if (!res.ok) {

@@ -44,14 +44,22 @@ export default function Home() {
             className="mb-3"
             priority
           />
-          <p className="text-sm font-medium text-brand">EEAT Evaluator</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-800">
+          <h1 className="text-2xl font-bold text-neutral-800">EEAT Evaluator</h1>
+          <a
+            href="https://blueivorycreative.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 text-sm font-medium text-brand hover:underline"
+          >
             Blue Ivory Creative
-          </h1>
+          </a>
         </div>
-        <p className="mt-4 text-sm text-neutral-500">
-          Score an article against Google&apos;s Search Quality Rater Guidelines --
-          Experience, Expertise, Authoritativeness, and Trust.
+        <p className="mt-4 text-center text-sm text-neutral-500">
+          Evaluate your content for{" "}
+          <b className="font-semibold text-neutral-700">
+            Experience, Expertise, Authoritativeness, and Trustworthiness
+          </b>
+          . Add an article and get your grades.
         </p>
       </header>
 

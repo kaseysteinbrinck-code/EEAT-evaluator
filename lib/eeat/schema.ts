@@ -68,18 +68,44 @@ export const EeatEvaluationSchema = z.object({
 
 export type EeatEvaluation = z.infer<typeof EeatEvaluationSchema>;
 
+// Anchored to the QRG's own five quality levels (Lowest=1, Low=25, Medium=50,
+// High=75, Highest=100) -- five equal 20-point zones, each split into a
+// minus/base/plus sub-grade. NOT a generic school grading scale: that would
+// put QRG's "Medium" (50 -- "meets basic expectations... nothing wrong, but
+// nothing special" per Google's own rating guidance) below an F cutoff,
+// which misrepresents an unremarkable-but-acceptable score as an academic
+// failure. See lib/eeat/schema.ts discussion in project history if this
+// needs revisiting.
 export function scoreToGrade(score: number): Grade {
-  if (score >= 97) return "A+";
-  if (score >= 93) return "A";
-  if (score >= 90) return "A-";
-  if (score >= 87) return "B+";
-  if (score >= 83) return "B";
-  if (score >= 80) return "B-";
-  if (score >= 77) return "C+";
-  if (score >= 73) return "C";
-  if (score >= 70) return "C-";
-  if (score >= 67) return "D+";
-  if (score >= 63) return "D";
-  if (score >= 60) return "D-";
+  if (score >= 94) return "A+";
+  if (score >= 87) return "A";
+  if (score >= 80) return "A-";
+  if (score >= 74) return "B+";
+  if (score >= 67) return "B";
+  if (score >= 60) return "B-";
+  if (score >= 54) return "C+";
+  if (score >= 47) return "C";
+  if (score >= 40) return "C-";
+  if (score >= 34) return "D+";
+  if (score >= 27) return "D";
+  if (score >= 20) return "D-";
   return "F";
+}
+
+export type QrgLabel = "Lowest" | "Low" | "Medium" | "High" | "Highest";
+
+/**
+ * Google's own five-point QRG label for a score -- same 20-point zone
+ * boundaries as scoreToGrade, so the two are always consistent (a score's
+ * letter and its QRG label land in matching tiers by construction). Shown
+ * alongside the letter grade as "Google: 45/100 - Medium" so the raw number
+ * self-explains as Google's rating scale rather than reading as a percentage
+ * that should numerically match the letter.
+ */
+export function scoreToQrgLabel(score: number): QrgLabel {
+  if (score >= 80) return "Highest";
+  if (score >= 60) return "High";
+  if (score >= 40) return "Medium";
+  if (score >= 20) return "Low";
+  return "Lowest";
 }

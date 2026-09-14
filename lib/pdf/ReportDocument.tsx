@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { EeatEvaluation } from "@/lib/eeat/schema";
+import { scoreToQrgLabel } from "@/lib/eeat/schema";
 
 const COLORS = {
   ink: "#1a1a1a",
@@ -35,12 +36,15 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 8,
-    gap: 16,
+    gap: 6,
   },
   metaItem: {
     fontSize: 9,
     color: COLORS.muted,
+    marginRight: 10,
+    marginBottom: 3,
   },
   overallBox: {
     flexDirection: "row",
@@ -60,6 +64,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.ink,
     maxWidth: 380,
+  },
+  overallGoogleLine: {
+    fontSize: 8.5,
+    color: COLORS.muted,
+    marginTop: 2,
   },
   pillarSection: {
     marginBottom: 16,
@@ -178,9 +187,12 @@ function PillarBlock({
     <View style={styles.pillarSection} wrap={false}>
       <View style={styles.pillarHeaderRow}>
         <Text style={styles.pillarName}>{name}</Text>
-        <Text style={styles.pillarGrade}>
-          {result.grade} <Text style={styles.pillarScoreNote}>({result.score}/100)</Text>
-        </Text>
+        <View>
+          <Text style={styles.pillarGrade}>{result.grade}</Text>
+          <Text style={styles.pillarScoreNote}>
+            Google: {result.score}/100 · {scoreToQrgLabel(result.score)}
+          </Text>
+        </View>
       </View>
       <Text style={styles.rationale}>{result.rationale}</Text>
       {result.checklist.map((item, i) => (
@@ -236,7 +248,12 @@ export function ReportDocument({ evaluation }: { evaluation: EeatEvaluation }) {
         </View>
 
         <View style={styles.overallBox}>
-          <Text style={styles.overallGrade}>{overall.grade}</Text>
+          <View>
+            <Text style={styles.overallGrade}>{overall.grade}</Text>
+            <Text style={styles.overallGoogleLine}>
+              Google: {overall.score}/100 · {scoreToQrgLabel(overall.score)}
+            </Text>
+          </View>
           <Text style={styles.overallSummary}>{overall.summary}</Text>
         </View>
 

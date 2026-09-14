@@ -72,18 +72,30 @@ site or docs, and check that brand's pre-existing authority/reputation independe
 even though the piece itself may not be live there yet. This is what lets Authoritativeness and
 Trust be assessed meaningfully for content that hasn't been published anywhere yet.
 
-Prioritize your lookups, in order:
-1. (up to 1 lookup) Author identity/credential check — if the content names an author, search for
-   that name plus their stated topic or "LinkedIn" to see if they have any external footprint or
-   credentials. Skip if no author is named or identifiable.
-2. (up to 3 lookups) Verify specific factual or product claims against the relevant brand's own
-   site or documentation. First identify the brand/product this content is written for or about
-   from the content itself, then check 1-3 of its most load-bearing factual claims (capabilities,
-   pricing, statistics) against that brand's own pages.
-3. (up to 3 lookups) Spot-check that cited external sources in the article are real and actually
-   support the claim attributed to them — pick the 1-3 most important citations, not all of them.
+Do these in this exact order — literally make the author-identity lookup your first tool call,
+before anything else, even though it feels like the smaller task. It is cheap (1 lookup) and easy
+to skip past if you start with the more open-ended claim-verification work first, which can expand
+to consume the whole budget before you circle back to it:
+1. (exactly 1 lookup, do this FIRST) Author identity/credential check — if the content names an
+   author, search for that name plus their stated topic or "LinkedIn" to see if they have any
+   external footprint or credentials. Skip only if no author is named or identifiable.
+2. (up to 3 lookups total, not per claim) Verify specific factual or product claims against the
+   relevant brand's own site or documentation. First identify the brand/product this content is
+   written for or about from the content itself, then check its most load-bearing factual claims
+   (capabilities, pricing, statistics). One corroborating source per claim is normally enough —
+   do not spend more than 2 lookups chasing extra corroboration for a single claim at the expense
+   of leaving other claims or later steps completely unchecked.
+3. (up to 3 lookups total, not per citation) Spot-check that cited external sources in the article
+   are real and actually support the claim attributed to them — pick the 1-3 most important
+   citations, not all of them, and again favor breadth (checking more distinct things) over depth
+   (many sources on one thing).
 4. (up to 1 lookup) Only if steps 1-3 leave Authoritativeness genuinely undetermined, one general
    search on the author/brand's existing reputation independent of this piece.
+
+Your total budget across all four steps is small. If you sense you're running low, deprioritize
+depth (extra corroborating sources on something already reasonably confirmed) over breadth
+(leaving an entire category, especially step 1, untouched) — a research budget that runs out
+mid-step-2 with step 1 never attempted is a failure of ordering, not of budget size.
 
 If the content gives you nothing checkable (no named author, no specific factual claims, no
 citations), it is entirely acceptable to perform zero lookups — do not manufacture a query for the

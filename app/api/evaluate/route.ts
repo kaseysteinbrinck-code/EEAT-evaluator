@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     content?: unknown;
+    extractedTitle?: unknown;
     source?: unknown;
     authorLinkedInUrl?: unknown;
     noDefinedAuthor?: unknown;
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
       ? body.publishingSite.trim().slice(0, 200)
       : undefined;
 
+  const extractedTitle =
+    typeof body.extractedTitle === "string" && body.extractedTitle.trim()
+      ? body.extractedTitle.trim().slice(0, 300)
+      : undefined;
+
   if (content.length < MIN_CONTENT_CHARS) {
     return NextResponse.json(
       {
@@ -108,6 +114,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const evaluation = await evaluateContent(content, {
+      extractedTitle,
       authorLinkedInUrl,
       noDefinedAuthor,
       publishingSite,

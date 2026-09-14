@@ -6,7 +6,7 @@ import {
   BOUNDED_RESEARCH_INSTRUCTIONS,
   CHECKLIST_SIGNALS_BY_PILLAR,
 } from "./rubric";
-import { EeatEvaluationSchema, type EeatEvaluation } from "./schema";
+import { EeatEvaluationSchema, scoreToGrade, type EeatEvaluation } from "./schema";
 
 const MODEL = "claude-sonnet-5";
 
@@ -87,6 +87,32 @@ function logUsage(label: string, usage: Anthropic.Messages.Usage): void {
   );
 }
 
+/**
+ * Heuristic title extraction from raw article text -- covers pasted
+ * markdown/text and file-upload extraction, neither of which has a real
+ * H1/title tag to pull from (unlike a live URL, which gets its title from
+ * Readability in lib/extract/url.ts). Not trusted to the model, same
+ * reasoning as wordCount below -- deterministic where possible beats an LLM
+ * guess that can come back null or inconsistent.
+ */
+function deriveTitleFromContent(text: string): string | null {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  if (!firstLine) return null;
+
+  const headingMatch = firstLine.match(/^#{1,6}\s+(.+)$/);
+  const candidate = headingMatch ? headingMatch[1].trim() : firstLine;
+
+  if (candidate.length === 0 || candidate.length > 140) return null;
+  // A real paragraph masquerading as a "first line" reads like a sentence,
+  // not a title -- word count is a cheap proxy for that distinction.
+  if (!headingMatch && candidate.split(/\s+/).length > 20) return null;
+
+  return candidate;
+}
+
 function buildTools(maxUses: number): Anthropic.Messages.ToolUnion[] {
   return [
     { type: "web_search_20260209", name: "web_search", max_uses: maxUses },
@@ -96,6 +122,12 @@ function buildTools(maxUses: number): Anthropic.Messages.ToolUnion[] {
 
 export interface EvaluateOptions {
   maxResearchLookups?: number;
+  /**
+   * Real title already extracted client-side (Readability for a live URL,
+   * or whatever the file/paste flow determined). Takes priority over both
+   * the content-heuristic fallback and the model's own guess when present.
+   */
+  extractedTitle?: string;
   /**
    * User-supplied LinkedIn profile URL for the article's author. Only
    * meaningful for pasted/uploaded content, where there's no live page for
@@ -121,7 +153,7 @@ export async function evaluateContent(
 ): Promise<EeatEvaluation> {
   const client = new Anthropic();
   const system = buildSystemPrompt();
-  const maxUses = opts.maxResearchLookups ?? Number(process.env.EEAT_MAX_RESEARCH_LOOKUPS ?? 8);
+  const maxUses = opts.maxResearchLookups ?? Number(process.env.EEAT_MAX_RESEARCH_LOOKUPS ?? 15);
   const tools = buildTools(maxUses);
 
   const contextNotes: string[] = [];
@@ -198,7 +230,10 @@ export async function evaluateContent(
       "Based on everything above -- the article and any research you performed -- " +
       "produce the final E-E-A-T evaluation now. Do not perform further research.\n\n" +
       "Respond with ONLY a single JSON object matching this JSON Schema exactly -- no " +
-      "markdown code fences, no commentary before or after, just the raw JSON:\n\n" +
+      "markdown code fences, no commentary before or after, just the raw JSON. This will be " +
+      "parsed with JSON.parse(), so it must be strictly valid: escape every double-quote " +
+      "character that appears inside a string value as \\\", escape literal newlines inside " +
+      "string values as \\n, and do not include any other control characters.\n\n" +
       EEAT_JSON_SCHEMA,
   });
 
@@ -208,45 +243,92 @@ export async function evaluateContent(
   // see the note on EEAT_JSON_SCHEMA above for why. tool_choice: none still
   // prevents further tool calls without affecting the cached prefix (cache
   // matching is on the tools -> system -> messages content, not tool_choice).
-  const final = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    system,
-    tools,
-    tool_choice: { type: "none" },
-    messages,
-  });
+  //
+  // Trade-off of dropping output_config.format: no more hard schema
+  // guarantee, so the model can occasionally emit invalid JSON (observed:
+  // an unescaped quote broke JSON.parse after a full research+synthesis
+  // pass had already run, wasting ~2min and real API cost with nothing to
+  // show for it). One bounded retry -- telling the model exactly what parse
+  // error it produced -- recovers from that without giving back the caching
+  // win in the common case.
+  let evaluation: EeatEvaluation | null = null;
+  let lastError: string | null = null;
 
-  logUsage("synthesis (final)", final.usage);
+  for (let attempt = 0; attempt < 2 && !evaluation; attempt++) {
+    if (attempt > 0 && lastError) {
+      messages.push({
+        role: "user",
+        content:
+          `Your previous response was not valid JSON: ${lastError}. Resend the ENTIRE JSON ` +
+          "object again from scratch, valid this time -- double-check every string value for " +
+          "unescaped quotes or control characters.",
+      });
+    }
 
-  const textBlock = final.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-  if (!textBlock) {
-    throw new Error("Model did not return a text response for the E-E-A-T evaluation.");
+    const final = await client.messages.create({
+      model: MODEL,
+      max_tokens: 16000,
+      system,
+      tools,
+      tool_choice: { type: "none" },
+      messages,
+    });
+    logUsage(`synthesis (attempt ${attempt + 1})`, final.usage);
+    messages.push({ role: "assistant", content: final.content });
+
+    const textBlock = final.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+    if (!textBlock) {
+      lastError = "Model did not return a text response.";
+      continue;
+    }
+
+    const jsonText = textBlock.text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```\s*$/i, "");
+
+    let rawParsed: unknown;
+    try {
+      rawParsed = JSON.parse(jsonText);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      continue;
+    }
+
+    const validated = EeatEvaluationSchema.safeParse(rawParsed);
+    if (!validated.success) {
+      lastError = validated.error.message;
+      continue;
+    }
+
+    evaluation = validated.data;
   }
 
-  const jsonText = textBlock.text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/```\s*$/i, "");
-
-  let rawParsed: unknown;
-  try {
-    rawParsed = JSON.parse(jsonText);
-  } catch (err) {
-    throw new Error(
-      `Model response was not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  if (!evaluation) {
+    throw new Error(`Model did not return a usable E-E-A-T evaluation: ${lastError}`);
   }
 
-  const validated = EeatEvaluationSchema.safeParse(rawParsed);
-  if (!validated.success) {
-    throw new Error(
-      `Model response did not match the expected schema: ${validated.error.message}`,
-    );
-  }
-
-  const evaluation = validated.data;
   // Word count is arithmetic the model is unreliable at -- compute it ourselves.
   evaluation.contentMeta.wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+
+  // Title priority: a real client-extracted title (Readability, for a live
+  // URL) beats a content-heuristic guess, which beats the model's own guess.
+  const derivedTitle = opts.extractedTitle?.trim() || deriveTitleFromContent(content);
+  if (derivedTitle) {
+    evaluation.contentMeta.title = derivedTitle;
+  }
+
+  // Grade must be a pure function of score -- the model was asked to supply
+  // both independently, which let them drift out of sync (e.g. a 60/100
+  // coming back labeled C+ instead of D-). Always recompute grade from score
+  // server-side so the two can never disagree.
+  evaluation.pillars.experience.grade = scoreToGrade(evaluation.pillars.experience.score);
+  evaluation.pillars.expertise.grade = scoreToGrade(evaluation.pillars.expertise.score);
+  evaluation.pillars.authoritativeness.grade = scoreToGrade(
+    evaluation.pillars.authoritativeness.score,
+  );
+  evaluation.pillars.trust.grade = scoreToGrade(evaluation.pillars.trust.score);
+  evaluation.overall.grade = scoreToGrade(evaluation.overall.score);
+
   return evaluation;
 }

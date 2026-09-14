@@ -267,7 +267,15 @@ export async function evaluateContent(
 
     const final = await client.messages.create({
       model: MODEL,
-      max_tokens: 16000,
+      // Adaptive thinking runs by default on Sonnet 5 and its tokens count
+      // against this same budget -- on an unlucky run, thinking alone can
+      // exhaust max_tokens before any text is emitted, leaving nothing to
+      // parse (observed in production: "Model did not return a text
+      // response"). Extra headroom plus a lower effort (this is a
+      // formatting/organization pass over already-completed research, not
+      // a task needing deep reasoning) both reduce how often that happens.
+      max_tokens: 24000,
+      output_config: { effort: "medium" },
       system,
       tools,
       tool_choice: { type: "none" },
@@ -278,7 +286,7 @@ export async function evaluateContent(
 
     const textBlock = final.content.find((b): b is Anthropic.TextBlock => b.type === "text");
     if (!textBlock) {
-      lastError = "Model did not return a text response.";
+      lastError = `Model did not return a text response (stop_reason: ${final.stop_reason}).`;
       continue;
     }
 
